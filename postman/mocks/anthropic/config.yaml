@@ -1,0 +1,11 @@
+version: 1
+name: Anthropic Messages
+slug: anthropic-messages
+protocol: http
+port: 4901
+interceptRequests: true
+origin: api.anthropic.com
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true
