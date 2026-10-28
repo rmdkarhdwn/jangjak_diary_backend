@@ -32,5 +32,17 @@ test('listening Fastify service → real SDK → Postman simulation over HTTP', 
       if (expected) assert.equal(body.error.code, expected);
       else assert.equal(body.relations[0].score, 0.66);
     }
+    const reference = await fetch(`${address}/analyze-relations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        interests: [{ id: 'books', title: '책 읽기', logs: ['오늘 기타를 치는 책을 읽었다. 여러가지 주법이 있는게 신기했다.'] }],
+        candidateInterests: [{ id: 'guitar', title: '기타 치기' }],
+      }),
+    });
+    assert.equal(reference.status, 200);
+    const body = await reference.json();
+    assert.equal(body.relations[0].basis, 'explicit_reference');
+    assert.equal(body.relations[0].score, 0.95);
+    assert.equal(body.relations[0].evidence.length, 1);
   } finally { await app.close(); }
 });

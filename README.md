@@ -36,6 +36,7 @@ Node.js 22+ · TypeScript · Fastify · Zod · dotenv · Anthropic SDK.
       "target": "game",
       "score": 0.66,
       "type": "motivation",
+      "basis": "shared_logs",
       "summary": "직접 시스템을 만들고 결과물을 확인하는 즐거움이 공통됩니다.",
       "evidence": ["직접 앱 만드는 게 재밌다", "시스템 만드는 게 재밌다"],
       "suggestion": "Flutter로 작은 게임 도구를 만들어볼 수 있습니다."
@@ -44,8 +45,10 @@ Node.js 22+ · TypeScript · Fastify · Zod · dotenv · Anthropic SDK.
 }
 ```
 
-- 관심사 1~12개, ID 1~100자(중복 금지), 제목 1~200자, 관심사별 로그 1~30개, 로그 1~2,000자. 공백만 있는 문자열은 거부합니다. 요청 본문은 최대 128 KiB입니다.
-- 관심사 1개는 검증 후 LLM 호출 없이 `{"relations":[]}`를 반환합니다. 관계가 없거나 기준에 못 미쳐도 빈 배열을 정상 반환합니다.
+- 기록이 있는 관심사는 `interests`에 1개 이상 보냅니다. 기록이 없는 관심사는 선택 필드 `candidateInterests: [{"id":"guitar","title":"기타 치기"}]`에 ID·제목만 보냅니다. 빈 로그나 가짜 기록을 채우지 않습니다. [한쪽 기록의 직접 언급 예시](examples/analyze-reference-request.json)를 참고하세요.
+- 두 목록을 합쳐 관심사 1~12개, ID 1~100자(목록 사이 중복도 금지), 제목 1~200자, 기록이 있는 관심사별 로그 1~30개, 로그 1~2,000자. 공백만 있는 문자열은 거부합니다. 요청 본문은 최대 128 KiB입니다.
+- 후보까지 합쳐 관심사 1개면 검증 후 LLM 호출 없이 `{"relations":[]}`를 반환합니다. 관계가 없거나 기준에 못 미쳐도 빈 배열을 정상 반환합니다.
+- `basis: shared_logs`는 양쪽 기록의 공통점입니다. `basis: explicit_reference`는 source의 기록이 target의 관심사를 직접 다룬 경우이며 `type: topic`만 허용합니다. 예를 들어 책 기록에서 기타 주법을 다루면 기타 쪽 기록이 없어도 연결합니다. 후보의 제목끼리 비슷하다는 이유만으로 연결하지 않습니다.
 - `type`: `topic | motivation | behavior | transition`. 같은 쌍은 방향과 관계없이 한 번만 반환하며 `transition`만 source → target 방향에 의미가 있습니다.
 - 문자열 로그는 그대로 사용 가능합니다. 시간 분석이 필요하면 일부 또는 전체 로그를 `{"text":"이유 원문", "createdAt":"2026-10-25T10:00:00+09:00"}`로 보냅니다. `createdAt`은 시간대가 있는 ISO 8601 날짜입니다.
 - 두 관심사 모두에 날짜가 있는 로그가 없으면 백엔드가 `temporal=0`으로 고정합니다. `transition`은 양쪽 날짜가 있고 source의 기록이 target보다 앞선 경우만 허용합니다. 배열 순서·제목에서 시간을 추측하지 않습니다. 최소한의 시간 검증이며 실제 인과관계를 증명하지는 않습니다.
@@ -56,13 +59,14 @@ Flutter → Fastify의 본문/요청 Zod 검증 → Anthropic 어댑터 → Haik
 
 프롬프트는 제목보다 **장작을 넣은 이유 원문**을 우선합니다. 제목과 로그는 명령이 아닌 데이터로 취급합니다. LLM에는 `score` 대신 0~100의 `scores.topic/motivation/behavior/temporal`을 요구하며 SDK의 structured output으로 JSON 형태를 제한합니다. 이후 서버에서 원래의 엄격한 Zod 스키마로 다시 검증합니다.
 
-등록되지 않은 ID, 자기 연결, 중복 쌍, 범위 밖 점수, 알 수 없는 type, 누락 필드, 추가 필드는 거부합니다. evidence는 연결된 두 관심사의 **로그 원문과 정확히 일치**해야 하며 양쪽에서 하나 이상 필요합니다. 상상한 근거·다른 관심사의 근거는 거부합니다. 잘린 출력·거절 응답·JSON이 아닌 출력도 실패입니다. 의미상 요약의 정확성까지 Zod가 보장하지는 않습니다.
+등록되지 않은 ID, 자기 연결, 중복 쌍, 범위 밖 점수, 알 수 없는 type/basis, 누락 필드, 추가 필드는 거부합니다. `shared_logs`의 evidence는 양쪽 로그 원문에서 적어도 하나씩, 총 2~10개가 필요합니다. `explicit_reference`는 source의 직접 언급 원문 1~10개만 근거로 쓰고, target에 기록이 있는 것처럼 꾸미지 않습니다. 두 방식 모두 **전송한 원문과 정확히 일치**해야 합니다. 상상한 근거·다른 관심사의 근거는 거부합니다. 잘린 출력·거절 응답·JSON이 아닌 출력도 실패입니다. 의미상 직접 언급 여부와 요약의 정확성까지 Zod가 보장하지는 않습니다.
 
 ```text
-score = (topic × 0.20 + motivation × 0.40 + behavior × 0.25 + temporal × 0.15) / 100
+shared_logs: score = (topic × 0.20 + motivation × 0.40 + behavior × 0.25 + temporal × 0.15) / 100
+explicit_reference: score = topic / 100
 ```
 
-소수점 넷째 자리까지 반환합니다. 반올림 전 점수 0.60 미만은 제외하고 점수 내림차순으로 반환합니다. 0.60은 초기 제품 정책용 휴리스틱이며 통계적 신뢰도/확률이 아닙니다. 기준을 바꾸려면 `src/schemas/relation.ts`의 `MIN_RELATION_SCORE`를 수정합니다. 제목만의 일치와 한쪽 기록만으로는 연결하지 않도록 프롬프트에서 지시합니다.
+소수점 넷째 자리까지 반환합니다. `shared_logs`는 반올림 전 점수 0.60 미만, `explicit_reference`는 직접 다뤘다는 명확성 점수 0.80 미만을 제외합니다. 점수 내림차순으로 반환합니다. 두 점수는 서로 다른 근거의 밀접도를 나타내는 초기 제품 정책용 휴리스틱이며 통계적 신뢰도/확률이 아닙니다. 직접 언급 점수를 공통 동기·행동의 유사성으로 해석하지 않습니다. 기준은 `src/schemas/relation.ts`의 `MIN_RELATION_SCORE`와 `MIN_REFERENCE_SCORE`입니다. 동음이의어(예: ‘기타 사항’)·비유·제목끼리의 유사성만으로 연결하지 않도록 프롬프트에서 지시합니다.
 
 예: topic=40, motivation=95, behavior=80, temporal=60이면 **0.75**입니다. 날짜가 없는 같은 입력은 temporal=0이 적용되어 **0.66**입니다.
 

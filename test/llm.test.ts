@@ -12,6 +12,7 @@ const input = { interests: [
 ] };
 const output = { relations: [{
   source: 'flutter', target: 'game',
+  basis: 'shared_logs',
   scores: { topic: 40, motivation: 95, behavior: 80, temporal: 60 },
   type: 'motivation', summary: '만드는 즐거움이 공통됩니다.',
   evidence: ['직접 앱 만드는 게 재밌다', '시스템 만드는 게 재밌다'],

@@ -20,11 +20,20 @@ export const analyzeRequestSchema = z.strictObject({
     title: z.string().trim().min(1).max(200),
     logs: z.array(logSchema).min(1).max(30),
   })).min(1).max(12),
-}).superRefine(({ interests }, ctx) => {
+  // Recordless interests provide identity/context without inventing an empty log.
+  candidateInterests: z.array(z.strictObject({
+    id: idSchema,
+    title: z.string().trim().min(1).max(200),
+  })).max(11).optional(),
+}).superRefine(({ interests, candidateInterests = [] }, ctx) => {
+  if (interests.length + candidateInterests.length > 12) {
+    ctx.addIssue({ code: 'custom', path: ['candidateInterests'], message: '관심사는 합쳐서 최대 12개입니다.' });
+  }
   const ids = new Set<string>();
-  interests.forEach(({ id }, index) => {
+  [...interests, ...candidateInterests].forEach(({ id }, index) => {
     if (ids.has(id)) {
-      ctx.addIssue({ code: 'custom', path: ['interests', index, 'id'], message: '관심사 id가 중복되었습니다.' });
+      const path = index < interests.length ? ['interests', index, 'id'] : ['candidateInterests', index - interests.length, 'id'];
+      ctx.addIssue({ code: 'custom', path, message: '관심사 id가 중복되었습니다.' });
     }
     ids.add(id);
   });
@@ -47,10 +56,11 @@ export const llmResponseSchema = z.strictObject({
   relations: z.array(z.strictObject({
     source: idSchema,
     target: idSchema,
+    basis: z.enum(['shared_logs', 'explicit_reference']),
     scores: componentScoresSchema,
     type: relationTypeSchema,
     summary: nonBlank(1_000),
-    evidence: z.array(logTextSchema).min(2).max(10),
+    evidence: z.array(logTextSchema).min(1).max(10),
     suggestion: nonBlank(1_000),
   })).max(30),
 });
@@ -62,6 +72,7 @@ export type AnalyzeResponse = { relations: Relation[] };
 
 // 초기 제품 정책이며 확률이나 통계적으로 보정된 신뢰도가 아닙니다.
 export const MIN_RELATION_SCORE = 0.60;
+export const MIN_REFERENCE_SCORE = 0.80;
 
 export function logText(log: Log): string {
   return typeof log === 'string' ? log : log.text;
@@ -88,6 +99,9 @@ export function validateAndScore(raw: string, request: AnalyzeRequest): AnalyzeR
   if (!parsed.success) throw invalidLlmResponse();
 
   const interests = new Map(request.interests.map((interest) => [interest.id, interest]));
+  for (const candidate of request.candidateInterests ?? []) {
+    interests.set(candidate.id, { ...candidate, logs: [] });
+  }
   const pairs = new Set<string>();
   const relations: Relation[] = [];
 
@@ -103,14 +117,27 @@ export function validateAndScore(raw: string, request: AnalyzeRequest): AnalyzeR
     const sourceLogs = new Set(source.logs.map(logText));
     const targetLogs = new Set(target.logs.map(logText));
     const evidence = new Set(relation.evidence);
-    if (
-      evidence.size !== relation.evidence.length ||
-      relation.evidence.some((text) => !sourceLogs.has(text) && !targetLogs.has(text)) ||
-      !relation.evidence.some((text) => sourceLogs.has(text)) ||
-      !relation.evidence.some((text) => targetLogs.has(text))
-    ) {
+    if (evidence.size !== relation.evidence.length) {
       throw invalidLlmResponse();
     }
+
+    if (relation.basis === 'explicit_reference') {
+      // A direct reference is a topic link grounded entirely in source records.
+      // It says nothing about shared motivation, behavior, or a temporal shift.
+      if (relation.type !== 'topic' || sourceLogs.size === 0 ||
+        relation.evidence.some((text) => !sourceLogs.has(text))) throw invalidLlmResponse();
+      const score = relation.scores.topic / 100;
+      if (score >= MIN_REFERENCE_SCORE) {
+        const { scores: _scores, ...publicRelation } = relation;
+        relations.push({ ...publicRelation, score: Math.round(score * 10_000) / 10_000 });
+      }
+      continue;
+    }
+
+    if (relation.evidence.length < 2 ||
+      relation.evidence.some((text) => !sourceLogs.has(text) && !targetLogs.has(text)) ||
+      !relation.evidence.some((text) => sourceLogs.has(text)) ||
+      !relation.evidence.some((text) => targetLogs.has(text))) throw invalidLlmResponse();
 
     const sourceTimes = logTimes(source);
     const targetTimes = logTimes(target);

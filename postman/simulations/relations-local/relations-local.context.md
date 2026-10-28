@@ -33,6 +33,11 @@ No real API key is needed; do not point a real provider key at this mock.
 ## Observations
 
 <!-- begin:observations -->
+2026-10-26: after adding source-only topic references, the backend simulation
+and Flutter HTTP integration both passed. The sole `anthropic` member served
+shared-log, explicit-reference, upstream-failure, and malformed-output traffic;
+none stayed silent. The reference fixture used a recordless guitar target and
+one exact book-log quote; the real model was tested separately, not by this run.
 2026-10-26: the only member, `anthropic`, served all three requests: valid output,
 upstream 500, and malformed generated JSON. The listening Fastify server returned
 200/502/502 respectively; the simulation test passed. No member stayed silent.

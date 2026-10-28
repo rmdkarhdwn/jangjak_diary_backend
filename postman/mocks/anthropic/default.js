@@ -22,13 +22,23 @@ http.createServer((req, res) => {
   if (marker === '__upstream_failure__') {
     return send(500, { type: 'error', error: { type: 'api_error', message: 'Simulated upstream failure' } });
   }
-  const result = { relations: [{
+  let result = { relations: [{
     source: 'flutter', target: 'game',
+    basis: 'shared_logs',
     scores: { topic: 40, motivation: 95, behavior: 80, temporal: 60 },
     type: 'motivation', summary: '직접 만들어 결과물을 확인하는 즐거움이 공통됩니다.',
     evidence: ['직접 앱 만드는 게 재밌다', '시스템 만드는 게 재밌다'],
     suggestion: 'Flutter로 작은 게임 도구를 만들어보세요.',
   }] };
+  if (request.interests[0]?.id === 'books' && request.candidateInterests?.some((item) => item.id === 'guitar')) {
+    result = { relations: [{
+      source: 'books', target: 'guitar', basis: 'explicit_reference', type: 'topic',
+      scores: { topic: 95, motivation: 0, behavior: 0, temporal: 0 },
+      summary: '독서 기록에서 기타 주법을 직접 다루고 있습니다.',
+      evidence: [request.interests[0].logs[0]],
+      suggestion: '책에서 본 기타 주법 하나를 연습해보세요.',
+    }] };
+  }
   send(200, {
     id: 'msg_local_simulation', type: 'message', role: 'assistant', model: body.model,
     content: [{ type: 'text', text: marker === '__invalid_json__' ? 'not JSON' : JSON.stringify(result) }],

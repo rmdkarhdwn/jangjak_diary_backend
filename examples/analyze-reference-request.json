@@ -1,0 +1,12 @@
+{
+  "interests": [
+    {
+      "id": "books",
+      "title": "책 읽기",
+      "logs": ["오늘 기타를 치는 책을 읽었다. 여러가지 주법이 있는게 신기했다."]
+    }
+  ],
+  "candidateInterests": [
+    { "id": "guitar", "title": "기타 치기" }
+  ]
+}
