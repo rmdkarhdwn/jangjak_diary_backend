@@ -7,3 +7,4 @@ dist/
 *.ndjson
 .DS_Store
 coverage/
+.data/

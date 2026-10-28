@@ -1,7 +1,7 @@
 # 장작일기 AI 관계 분석 프록시
 
 Node.js 22+ · TypeScript · Fastify · Zod · dotenv · Anthropic SDK.
-별도 로컬 개발 서버입니다. 회원·인증·DB·파일 저장은 없습니다. Flutter 앱의 기존 화면 연결은 이 프로젝트에 포함하지 않습니다.
+별도 로컬 개발 서버입니다. 회원·인증·DB는 없으며 일기 원문·분석 결과는 저장하지 않습니다. 데모 호출 횟수만 로컬 파일에 저장합니다. Flutter 앱의 기존 화면 연결은 이 프로젝트에 포함하지 않습니다.
 
 ## API 계약
 
@@ -81,15 +81,25 @@ explicit_reference: score = topic / 100
 | 400 | INVALID_REQUEST | 빈 interests, 중복 ID, 빈 로그, 잘못된 필드/JSON |
 | 413 | PAYLOAD_TOO_LARGE | 본문 128 KiB 초과 |
 | 415 | UNSUPPORTED_MEDIA_TYPE | JSON이 아닌 요청 |
+| 429 | DAILY_ANALYSIS_LIMIT | 서버 전체 일일 분석 시도 한도, `Retry-After` 초 단위 제공 |
 | 500 | LLM_NOT_CONFIGURED | API 키 미설정 |
 | 502 | INVALID_LLM_RESPONSE | JSON/스키마/근거/참조 검증 실패, 잘린 출력/거절 |
 | 502 | LLM_API_ERROR | 공급자 인증·요청·네트워크·5xx 실패 |
 | 503 | LLM_RATE_LIMITED | 공급자 요청 한도 초과 |
+| 503 | ANALYSIS_BUDGET_UNAVAILABLE | 사용 횟수 파일을 읽거나 저장할 수 없음, 유료 호출 시작 안 함 |
 | 504 | LLM_TIMEOUT | 제한 시간 초과 |
 | 404 | NOT_FOUND | 없는 경로 |
 | 500 | INTERNAL_ERROR | 예기치 못한 서버 오류 |
 
 요청 검증 오류에는 `error.details: [{"path":"interests.0.logs", "message":"..."}]`가 추가됩니다. 로그 원문·키·공급자의 응답 본문은 오류나 서버 로그에 출력하지 않습니다. 원문은 분석 시 Anthropic에 전송됩니다. SDK 재시도는 0회, 기본 타임아웃 45초입니다. 호출 실패를 가짜 관계나 빈 배열로 바꾸지 않습니다.
+
+## 데모 호출 제한
+
+기본 `AI_DAILY_LIMIT=5`는 **서버 전체 하루 5회 분석 시도**입니다. 한국 시간 자정에 초기화합니다. LLM 호출 직전에 사용 횟수를 예약하므로 실패한 시도도 차감하며, 동시에 여러 요청이 와도 한도를 넘기지 않습니다. 잘못된 요청, `/health`, 관심사 1개의 LLM 생략 경로는 차감하지 않습니다. 한도를 넘기면 429 `DAILY_ANALYSIS_LIMIT`와 다음 한국 자정까지의 `Retry-After` 초를 반환하며 공급자를 호출하지 않습니다.
+
+`npm run dev`와 `npm start`는 `AI_USAGE_FILE`(기본 `.data/relation-usage.json`)에 날짜와 횟수만 원자적으로 저장합니다. 파일은 Git에서 제외하며 원문·키는 포함하지 않습니다. 서버 재시작 후에도 남고, 파일을 읽거나 저장할 수 없으면 503으로 차단합니다. 횟수 파일을 삭제하면 한도가 초기화되므로 보존하세요. 이 방식은 로컬 데모의 **단일 서버 프로세스**용입니다. 다중 프로세스·공개 서비스에서는 공용 저장소와 사용자 인증을 통한 한도로 바꿔야 합니다.
+
+Flutter는 별도로 기기당 5회와 성공 결과 캐시·새 장작 3개 조건을 적용합니다. 여러 기기의 합계는 서버 한도가 우선합니다. API의 입력·성공 응답에는 변경이 없으며 Flutter가 이미 받은 `score`를 다시 계산하지 않습니다. `buildApp()` 테스트 팩터리는 격리된 메모리 예산을 기본으로 쓰며 실제 서버 진입점 `src/server.ts`가 파일 예산을 주입합니다.
 
 ## 로컬 실행
 

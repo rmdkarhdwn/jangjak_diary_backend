@@ -2,8 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { AppError } from '../errors.js';
 import { analyzeRequestSchema, validateAndScore } from '../schemas/relation.js';
 import type { RelationLlm } from '../services/llm.js';
+import type { AnalysisBudget } from '../services/analysisBudget.js';
 
-export function registerAnalyzeRelations(app: FastifyInstance, llm: RelationLlm): void {
+export function registerAnalyzeRelations(app: FastifyInstance, llm: RelationLlm, budget: AnalysisBudget): void {
   app.post('/analyze-relations', async (request) => {
     if (request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
       throw new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type: application/json으로 요청해 주세요.');
@@ -15,6 +16,7 @@ export function registerAnalyzeRelations(app: FastifyInstance, llm: RelationLlm)
     }
     if (parsed.data.interests.length + (parsed.data.candidateInterests?.length ?? 0) === 1) return { relations: [] };
 
+    await budget.reserve();
     const raw = await llm.analyze(parsed.data);
     return validateAndScore(raw, parsed.data);
   });

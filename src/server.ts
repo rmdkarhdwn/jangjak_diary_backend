@@ -1,10 +1,12 @@
 import 'dotenv/config';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { DailyAnalysisBudget } from './services/analysisBudget.js';
 
 try {
   const config = loadConfig();
-  const app = await buildApp(config, undefined, true);
+  const app = await buildApp(config, undefined, true,
+    new DailyAnalysisBudget(config.AI_DAILY_LIMIT, config.AI_USAGE_FILE));
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       void app.close().catch(() => { process.exitCode = 1; });

@@ -4,8 +4,10 @@ import type { Config } from './config.js';
 import { AppError } from './errors.js';
 import { registerAnalyzeRelations } from './routes/analyzeRelations.js';
 import { createLlm, type RelationLlm } from './services/llm.js';
+import { DailyAnalysisBudget, type AnalysisBudget } from './services/analysisBudget.js';
 
-export async function buildApp(config: Config, llm: RelationLlm = createLlm(config), logger = false) {
+export async function buildApp(config: Config, llm: RelationLlm = createLlm(config), logger = false,
+  budget: AnalysisBudget = new DailyAnalysisBudget(config.AI_DAILY_LIMIT)) {
   const app = Fastify({
     logger,
     bodyLimit: 128 * 1024,
@@ -16,6 +18,7 @@ export async function buildApp(config: Config, llm: RelationLlm = createLlm(conf
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
+      if (error.retryAfterSeconds) reply.header('Retry-After', String(error.retryAfterSeconds));
       app.log.warn({ code: error.code, statusCode: error.statusCode }, '요청 처리 실패');
       return reply.code(error.statusCode).send({ error: {
         code: error.code,
@@ -51,6 +54,6 @@ export async function buildApp(config: Config, llm: RelationLlm = createLlm(conf
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
-  registerAnalyzeRelations(app, llm);
+  registerAnalyzeRelations(app, llm, budget);
   return app;
 }

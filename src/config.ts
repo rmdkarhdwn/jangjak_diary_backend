@@ -8,6 +8,8 @@ const configSchema = z.object({
   ANTHROPIC_WORKSPACE_ID: z.string().trim().default(''),
   LLM_MODEL: z.string().trim().min(1).default('claude-haiku-5-5'),
   LLM_TIMEOUT_MS: z.coerce.number().int().min(1).max(120_000).default(45_000),
+  AI_DAILY_LIMIT: z.coerce.number().int().min(1).max(1000).default(5),
+  AI_USAGE_FILE: z.string().trim().min(1).default('.data/relation-usage.json'),
   CORS_ORIGINS: z.string().default('http://localhost:8080,http://127.0.0.1:8080')
     .transform((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean))
     .refine((origins) => origins.every((origin) => {

@@ -33,6 +33,11 @@ No real API key is needed; do not point a real provider key at this mock.
 ## Observations
 
 <!-- begin:observations -->
+2026-10-26: the backend simulation and expanded Flutter HTTP suite passed after
+adding daily budgets and client caching. The sole `anthropic` member served
+normal, direct-reference, malformed and failed-provider traffic; none stayed
+silent. In the cache flow, unchanged/two-new-record paths stayed local, while
+first analysis, a three-record update and a failed update reached the provider.
 2026-10-26: after adding source-only topic references, the backend simulation
 and Flutter HTTP integration both passed. The sole `anthropic` member served
 shared-log, explicit-reference, upstream-failure, and malformed-output traffic;
